@@ -1,10 +1,144 @@
 <script>
-let state=null; const statusLabels={Pain:'❤️ 症状・痛み',Activity:'🚶 活動性',Muscle:'💪 筋力',Nutrition:'🍚 栄養',Balance:'⚖ バランス',Alertness:'😴 覚醒・睡眠',Hydration:'💧 水分'};
-function loadPatients(){google.script.run.withSuccessHandler(patients=>{const sel=document.getElementById('patientSelect'); sel.innerHTML=''; patients.forEach(p=>{const opt=document.createElement('option'); opt.value=p.PatientID; opt.textContent=`${p.PatientID} ${p.Name||''}（${p.Disease||''}）`; sel.appendChild(opt);});}).withFailureHandler(err=>alert(err.message)).apiGetPatients();}
-function startGame(){const patientId=document.getElementById('patientSelect').value||'P01'; google.script.run.withSuccessHandler(s=>{state=s; document.getElementById('game').classList.remove('hidden'); render();}).withFailureHandler(err=>alert(err.message)).apiStartGame(patientId);}
-function useCard(cardId){google.script.run.withSuccessHandler(s=>{state=s; render();}).withFailureHandler(err=>alert(err.message)).apiUseCard(state,cardId);}
-function nextTurn(){google.script.run.withSuccessHandler(s=>{state=s; render(); if(state.finished) alert(`${state.result.message}：${state.result.score}点`);}).withFailureHandler(err=>alert(err.message)).apiNextTurn(state);}
-function render(){document.getElementById('patientName').textContent=`${state.patientId} ${state.patientName||''}`; document.getElementById('patientMeta').textContent=`${state.disease||''}　${state.want?'目標：'+state.want:''}　${state.difficulty||''}`; document.getElementById('turn').textContent=`Turn ${state.turn}/${state.maxTurn}　使用 ${state.cardsUsedThisTurn}/${state.maxCardsPerTurn}`; const status=document.getElementById('status'); status.innerHTML=''; Object.keys(statusLabels).forEach(k=>{const div=document.createElement('div'); div.className='status-item'; div.innerHTML=`<div>${statusLabels[k]}</div><div class="status-value">${state.status[k]}</div>`; status.appendChild(div);}); const ev=state.currentEvent; document.getElementById('eventCard').innerHTML=`<strong>${ev.ID||''} ${ev.Name||''}</strong><div class="meta">${ev.Type||''} ${ev.Category||''}</div><div class="effect">${effectText(ev)}</div><div>${ev.Learning?'学び：'+ev.Learning:''}</div>`; const hand=document.getElementById('hand'); hand.innerHTML=''; const canUse=state.cardsUsedThisTurn<state.maxCardsPerTurn; state.hand.forEach(c=>{const div=document.createElement('div'); div.className='card'; div.innerHTML=`<h4>${c.ID} ${c.Name||''}</h4><div class="meta">${c.Type||''} ${c.Subtype||''} ${c.Category||''}</div><div class="effect">${effectText(c)}</div><div class="meta">${c.Learning?'学び：'+c.Learning:''}</div><button ${canUse?'':'disabled'} onclick="useCard('${c.ID}')">使用</button>`; hand.appendChild(div);}); const pc=document.getElementById('permanentCards'); pc.innerHTML=''; (state.permanentCards||[]).forEach(c=>{const span=document.createElement('span'); span.className='badge'; span.textContent=`${c.ID} ${c.Name}`; pc.appendChild(span);}); document.getElementById('log').textContent=(state.log||[]).join('\n');}
-function effectText(obj){return Object.keys(statusLabels).map(k=>[k,Number(obj[k]||0)]).filter(([k,v])=>v!==0).map(([k,v])=>`${statusLabels[k]} ${v>0?'+':''}${v}`).join(' / ')||'効果なし';}
+let state = null;
+
+const statusLabels = {
+  Pain: '❤️ 症状・痛み',
+  Activity: '🚶 活動性',
+  Muscle: '💪 筋力',
+  Nutrition: '🍚 栄養',
+  Balance: '⚖ バランス',
+  Alertness: '😴 覚醒・睡眠',
+  Hydration: '💧 水分'
+};
+
+function loadPatients() {
+  google.script.run.withSuccessHandler(patients => {
+    const sel = document.getElementById('patientSelect');
+    sel.innerHTML = '';
+    patients.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.PatientID;
+      opt.textContent = `${p.PatientID} ${p.Name || ''}（${p.Disease || ''}）`;
+      sel.appendChild(opt);
+    });
+  }).withFailureHandler(err => alert(err.message)).apiGetPatients();
+}
+
+function startGame() {
+  const patientId = document.getElementById('patientSelect').value || 'P01';
+  google.script.run.withSuccessHandler(s => {
+    state = s;
+    document.getElementById('game').classList.remove('hidden');
+    render();
+  }).withFailureHandler(err => alert(err.message)).apiStartGame(patientId);
+}
+
+function revealEvent() {
+  google.script.run.withSuccessHandler(s => {
+    state = s;
+    render();
+  }).withFailureHandler(err => alert(err.message)).apiRevealEvent(state);
+}
+
+function useCard(cardId) {
+  google.script.run.withSuccessHandler(s => {
+    state = s;
+    render();
+  }).withFailureHandler(err => alert(err.message)).apiUseCard(state, cardId);
+}
+
+function nextTurn() {
+  google.script.run.withSuccessHandler(s => {
+    state = s;
+    render();
+    if (state.finished) alert(`${state.result.message}：${state.result.score}点`);
+  }).withFailureHandler(err => alert(err.message)).apiNextTurn(state);
+}
+
+function render() {
+  document.getElementById('patientName').textContent = `${state.patientId} ${state.patientName || ''}`;
+  document.getElementById('patientMeta').textContent = `${state.disease || ''}　${state.want ? '目標：' + state.want : ''}　${state.difficulty || ''}`;
+  document.getElementById('turn').textContent =
+    `Turn ${state.turn}/${state.maxTurn}　使用 ${state.cardsUsedThisTurn}/${state.maxCardsPerTurn}`;
+
+  const status = document.getElementById('status');
+  status.innerHTML = '';
+  Object.keys(statusLabels).forEach(k => {
+    const div = document.createElement('div');
+    div.className = 'status-item';
+    div.innerHTML = `<div>${statusLabels[k]}</div><div class="status-value">${state.status[k]}</div>`;
+    status.appendChild(div);
+  });
+
+  renderEvent();
+  renderHand();
+  renderPermanent();
+  document.getElementById('log').textContent = (state.log || []).join('\n');
+}
+
+function renderEvent() {
+  const area = document.getElementById('eventCard');
+  const ev = state.currentEvent;
+
+  if (!state.eventRevealed) {
+    area.innerHTML = `
+      <div class="event-back">
+        <h2>🎴 イベントカード</h2>
+        <p>クリックしてイベントを表示</p>
+        <button onclick="revealEvent()">イベントカードをめくる</button>
+      </div>
+    `;
+    return;
+  }
+
+  area.innerHTML = `
+    <div class="event-face">
+      <strong>${ev.ID || ''} ${ev.Name || ''}</strong>
+      <div class="meta">${ev.Type || ''} ${ev.Category || ''}</div>
+      <div class="effect">${effectText(ev)}</div>
+      <div>${ev.Learning ? '学び：' + ev.Learning : ''}</div>
+    </div>
+  `;
+}
+
+function renderHand() {
+  const hand = document.getElementById('hand');
+  hand.innerHTML = '';
+
+  const canUse = state.eventRevealed && state.cardsUsedThisTurn < state.maxCardsPerTurn;
+
+  state.hand.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.innerHTML = `
+      <h4>${c.ID} ${c.Name || ''}</h4>
+      <div class="meta">${c.Type || ''} ${c.Subtype || ''} ${c.Category || ''}</div>
+      <div class="effect">${effectText(c)}</div>
+      <div class="meta">${c.Learning ? '学び：' + c.Learning : ''}</div>
+      <button ${canUse ? '' : 'disabled'} onclick="useCard('${c.ID}')">使用</button>
+    `;
+    hand.appendChild(div);
+  });
+}
+
+function renderPermanent() {
+  const pc = document.getElementById('permanentCards');
+  pc.innerHTML = '';
+  (state.permanentCards || []).forEach(c => {
+    const span = document.createElement('span');
+    span.className = 'badge';
+    span.textContent = `${c.ID} ${c.Name}`;
+    pc.appendChild(span);
+  });
+}
+
+function effectText(obj) {
+  return Object.keys(statusLabels)
+    .map(k => [k, Number(obj[k] || 0)])
+    .filter(([k, v]) => v !== 0)
+    .map(([k, v]) => `${statusLabels[k]} ${v > 0 ? '+' : ''}${v}`)
+    .join(' / ') || '効果なし';
+}
+
 loadPatients();
 </script>

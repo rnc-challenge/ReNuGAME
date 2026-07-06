@@ -1,1 +1,52 @@
-<!doctype html><html><head><base target="_top"><?!= include('Style'); ?></head><body><div class="app"><h1>リハ栄養カードゲーム MVP v0.5</h1><div class="controls"><select id="patientSelect"></select><button onclick="startGame()">START</button></div><div id="game" class="hidden"><div class="panel"><h2 id="patientName"></h2><div id="patientMeta"></div><div id="turn"></div><div id="status" class="status-grid"></div></div><div class="panel event"><h3>イベント</h3><div id="eventCard"></div></div><div class="panel"><h3>手札</h3><div id="hand" class="hand"></div></div><div class="panel"><h3>永続カード</h3><div id="permanentCards" class="permanent"></div></div><div class="controls"><button onclick="nextTurn()">次のターン</button></div><div class="panel"><h3>ログ</h3><pre id="log"></pre></div></div></div><?!= include('Script'); ?></body></html>
+<!doctype html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Style'); ?>
+</head>
+<body>
+  <div class="app">
+    <h1>リハ栄養カードゲーム MVP v0.6</h1>
+
+    <div class="controls">
+      <select id="patientSelect"></select>
+      <button onclick="startGame()">START</button>
+    </div>
+
+    <div id="game" class="hidden">
+      <div class="panel">
+        <h2 id="patientName"></h2>
+        <div id="patientMeta"></div>
+        <div id="turn"></div>
+        <div id="status" class="status-grid"></div>
+      </div>
+
+      <div class="panel event">
+        <h3>イベント</h3>
+        <div id="eventCard"></div>
+      </div>
+
+      <div class="panel">
+        <h3>手札</h3>
+        <div id="hand" class="hand"></div>
+      </div>
+
+      <div class="panel">
+        <h3>永続カード</h3>
+        <div id="permanentCards" class="permanent"></div>
+      </div>
+
+      <div class="controls">
+        <button onclick="nextTurn()">効果を確認して次のターンへ</button>
+      </div>
+
+      <div class="panel">
+        <h3>ログ</h3>
+        <pre id="log"></pre>
+      </div>
+    </div>
+  </div>
+
+  <?!= include('Script'); ?>
+</body>
+</html>
