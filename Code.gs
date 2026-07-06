@@ -1,16 +1,17 @@
 /**
- * リハ栄養カードゲーム GAS v1.0
- * 
- * 対応DB:
- * - Patients
- * - Patient_Status
- * - Patient_Deck
- * - Card_Effects_Normalized
- * - Event_Effects_Normalized
+ * リハ栄養カードゲーム GAS v1.1
  *
- * 重要:
- * 1) SPREADSHEET_ID を自分のDBのIDに変更する
- * 2) Apps Scriptには Code.gs / Index.html / Style.html / Script.html の4ファイルだけ作ればよい
+ * v1.1 修正点
+ * - Patient_Status の旧列名にも対応
+ *   Pain / Initial_Pain / Status_❤️Pain
+ *   Activity / Initial_Activity / Status_🚶Activity
+ *   Muscle / Initial_Muscle / Status_💪Muscle
+ *   Nutrition / Initial_Nutrition / Status_🍚Nutrition
+ *   Balance / Initial_Balance / Status_⚖Balance
+ *   Alertness / Sleep / Initial_Alertness / Initial_Sleep / Status_😴Alertness / Status_😴Sleep
+ *   Hydration / Initial_Hydration / Status_💧Hydration
+ * - ファイル末尾に誤って追加された getPatientStatusRows は不要
+ * - Code.gs 1本にDBとゲームエンジンを統合
  */
 
 // ===============================
@@ -54,7 +55,7 @@ const STATUS_LABELS = {
 function doGet() {
   return HtmlService.createTemplateFromFile('Index')
     .evaluate()
-    .setTitle('リハ栄養カードゲーム v1.0')
+    .setTitle('リハ栄養カードゲーム v1.1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
@@ -103,9 +104,7 @@ const DB = (function () {
 
   function readSheet_(name) {
     const sh = ss_().getSheetByName(name);
-    if (!sh) {
-      throw new Error('Sheet not found: ' + name);
-    }
+    if (!sh) throw new Error('Sheet not found: ' + name);
 
     const values = sh.getDataRange().getValues();
     if (values.length < 2) return [];
@@ -147,10 +146,13 @@ const DB = (function () {
   }
 
   function normalizeEffect_(obj) {
-    STATUS_KEYS.forEach(function (k) {
-      const candidates = k === 'Alertness' ? ['Alertness', 'Sleep'] : [k];
-      obj[k] = number_(getFirst_(obj, candidates, 0), 0);
-    });
+    obj.Pain = number_(getFirst_(obj, ['Pain'], 0), 0);
+    obj.Activity = number_(getFirst_(obj, ['Activity'], 0), 0);
+    obj.Muscle = number_(getFirst_(obj, ['Muscle'], 0), 0);
+    obj.Nutrition = number_(getFirst_(obj, ['Nutrition'], 0), 0);
+    obj.Balance = number_(getFirst_(obj, ['Balance'], 0), 0);
+    obj.Alertness = number_(getFirst_(obj, ['Alertness', 'Sleep'], 0), 0);
+    obj.Hydration = number_(getFirst_(obj, ['Hydration'], 0), 0);
     return obj;
   }
 
@@ -191,13 +193,21 @@ const DB = (function () {
           PatientID: String(getFirst_(row, ['PatientID', 'Patient', '患者ID', 'ID'], '')).trim()
         };
 
-        STATUS_KEYS.forEach(function (k) {
-          const statusCandidates = k === 'Alertness' ? ['Alertness', 'Sleep'] : [k];
-          const goalCandidates = k === 'Alertness' ? ['Goal_Alertness', 'Goal_Sleep'] : ['Goal_' + k];
+        obj.Pain = number_(getFirst_(row, ['Pain', 'Initial_Pain', 'Status_❤️Pain'], 0), 0);
+        obj.Activity = number_(getFirst_(row, ['Activity', 'Initial_Activity', 'Status_🚶Activity'], 0), 0);
+        obj.Muscle = number_(getFirst_(row, ['Muscle', 'Initial_Muscle', 'Status_💪Muscle'], 0), 0);
+        obj.Nutrition = number_(getFirst_(row, ['Nutrition', 'Initial_Nutrition', 'Status_🍚Nutrition'], 0), 0);
+        obj.Balance = number_(getFirst_(row, ['Balance', 'Initial_Balance', 'Status_⚖Balance'], 0), 0);
+        obj.Alertness = number_(getFirst_(row, ['Alertness', 'Sleep', 'Initial_Alertness', 'Initial_Sleep', 'Status_😴Alertness', 'Status_😴Sleep'], 0), 0);
+        obj.Hydration = number_(getFirst_(row, ['Hydration', 'Initial_Hydration', 'Status_💧Hydration'], 0), 0);
 
-          obj[k] = number_(getFirst_(row, statusCandidates, 0), 0);
-          obj['Goal_' + k] = number_(getFirst_(row, goalCandidates, 0), 0);
-        });
+        obj.Goal_Pain = number_(getFirst_(row, ['Goal_Pain'], 0), 0);
+        obj.Goal_Activity = number_(getFirst_(row, ['Goal_Activity'], 0), 0);
+        obj.Goal_Muscle = number_(getFirst_(row, ['Goal_Muscle'], 0), 0);
+        obj.Goal_Nutrition = number_(getFirst_(row, ['Goal_Nutrition'], 0), 0);
+        obj.Goal_Balance = number_(getFirst_(row, ['Goal_Balance'], 0), 0);
+        obj.Goal_Alertness = number_(getFirst_(row, ['Goal_Alertness', 'Goal_Sleep'], 0), 0);
+        obj.Goal_Hydration = number_(getFirst_(row, ['Goal_Hydration'], 0), 0);
 
         return obj;
       })
@@ -270,11 +280,7 @@ const DB = (function () {
   function getEventsForPatient(patientId) {
     return getEvents().filter(function (event) {
       const targets = String(event.Targets || '').replace(/\s/g, '');
-
-      if (targets === '' || targets === 'ALL' || targets === '全患者') {
-        return true;
-      }
-
+      if (targets === '' || targets === 'ALL' || targets === '全患者') return true;
       return targets.split(',').indexOf(patientId) >= 0;
     });
   }
@@ -381,14 +387,10 @@ const DB = (function () {
 const GameEngine = (function () {
   function startGame(patientId) {
     const patient = DB.findPatient(patientId);
-    if (!patient) {
-      throw new Error('Patientsシートで患者が見つかりません。');
-    }
+    if (!patient) throw new Error('Patientsシートで患者が見つかりません。');
 
     const statusRow = DB.findStatus(patient.PatientID);
-    if (!statusRow) {
-      throw new Error('Patient_Statusに ' + patient.PatientID + ' がありません。');
-    }
+    if (!statusRow) throw new Error('Patient_Statusに ' + patient.PatientID + ' がありません。');
 
     const patientDeck = DB.getDeckForPatient(patient.PatientID);
 
@@ -409,27 +411,21 @@ const GameEngine = (function () {
     const deck = shuffle_(remainingCandidates.concat(patientDeck.addCards));
 
     const eventDeck = shuffle_(DB.getEventsForPatient(patient.PatientID));
-    if (eventDeck.length === 0) {
-      throw new Error(patient.PatientID + ' に使用できるイベントがありません。');
-    }
+    if (eventDeck.length === 0) throw new Error(patient.PatientID + ' に使用できるイベントがありません。');
 
     const currentEvent = eventDeck.shift();
     const initialStatus = pickStatus_(statusRow);
 
     return {
       gameId: Utilities.getUuid(),
-
       patientId: patient.PatientID,
       patient: patient,
-
       turn: 1,
       maxTurn: CONFIG.MAX_TURN,
       gameOver: false,
       finished: false,
-
       status: Object.assign({}, initialStatus),
       goals: pickGoals_(statusRow),
-
       statusHistory: [
         {
           label: '開始時',
@@ -437,7 +433,6 @@ const GameEngine = (function () {
           status: Object.assign({}, initialStatus)
         }
       ],
-
       fixedCards: fixedCards,
       chosenCandidates: chosenCandidates,
       hand: hand,
@@ -445,16 +440,13 @@ const GameEngine = (function () {
       discard: [],
       usedCards: [],
       permanentCards: [],
-
       eventDeck: eventDeck,
       eventDiscard: [],
       currentEvent: currentEvent,
       eventRevealed: false,
       eventHistory: [],
-
       cardsUsedThisTurn: 0,
       maxCardsPerTurn: CONFIG.MAX_CARDS_PER_TURN,
-
       log: [
         'ゲーム開始：' + patient.PatientID + ' ' + patient.Name,
         'Turn 1: イベントカードをめくってください'
@@ -463,24 +455,18 @@ const GameEngine = (function () {
   }
 
   function revealEvent(state) {
-    if (!state.currentEvent) {
-      throw new Error('イベントカードがありません。');
-    }
-
+    if (!state.currentEvent) throw new Error('イベントカードがありません。');
     if (state.eventRevealed) return state;
 
     applyEffect_(state.status, state.currentEvent);
     state.eventRevealed = true;
     state.eventHistory.push(state.currentEvent);
     state.log.push('Turn ' + state.turn + ': イベント「' + (state.currentEvent.Name || state.currentEvent.ID) + '」発生');
-
     return state;
   }
 
   function useCard(state, cardId) {
-    if (!state.eventRevealed) {
-      throw new Error('先にイベントカードをクリックして表示してください。');
-    }
+    if (!state.eventRevealed) throw new Error('先にイベントカードをクリックして表示してください。');
 
     if (state.cardsUsedThisTurn >= state.maxCardsPerTurn) {
       throw new Error('このターンで使えるカードは' + state.maxCardsPerTurn + '枚までです。');
@@ -490,9 +476,7 @@ const GameEngine = (function () {
       return String(c.ID) === String(cardId);
     });
 
-    if (idx < 0) {
-      throw new Error('手札にそのカードがありません: ' + cardId);
-    }
+    if (idx < 0) throw new Error('手札にそのカードがありません: ' + cardId);
 
     const card = state.hand.splice(idx, 1)[0];
     applyEffect_(state.status, card);
@@ -513,9 +497,7 @@ const GameEngine = (function () {
   }
 
   function nextTurn(state) {
-    if (!state.eventRevealed) {
-      throw new Error('イベントカードをめくってから次のターンへ進んでください。');
-    }
+    if (!state.eventRevealed) throw new Error('イベントカードをめくってから次のターンへ進んでください。');
 
     recordStatusHistory_(state);
     state.eventDiscard.push(state.currentEvent);
@@ -540,7 +522,6 @@ const GameEngine = (function () {
 
     state.currentEvent = state.eventDeck.shift();
     state.log.push('Turn ' + state.turn + ': イベントカードをめくってください');
-
     return state;
   }
 
@@ -625,16 +606,14 @@ const GameEngine = (function () {
     let achieved = 0;
 
     goalKeys.forEach(function (k) {
-      if (Number(state.status[k] || 0) >= Number(state.goals[k] || 0)) {
-        achieved++;
-      }
+      if (Number(state.status[k] || 0) >= Number(state.goals[k] || 0)) achieved++;
     });
 
     const score = goalKeys.length
       ? Math.round((achieved / goalKeys.length) * 100)
       : Math.round((STATUS_KEYS.reduce(function (s, k) {
-        return s + Number(state.status[k] || 0);
-      }, 0) / STATUS_KEYS.length) * 10);
+          return s + Number(state.status[k] || 0);
+        }, 0) / STATUS_KEYS.length) * 10);
 
     return {
       score: score,
