@@ -6,6 +6,8 @@ const CONFIG = {
   MAX_TURN: 3
 };
 
+// 画面・ゲーム内部では Alertness と呼ぶ。
+// DB v4では Sleep 列なので、読み込み時に Alertness に変換する。
 const STATUS_KEYS = ['Pain', 'Activity', 'Muscle', 'Nutrition', 'Balance', 'Alertness', 'Hydration'];
 
 const STATUS_LABELS = {
@@ -18,14 +20,24 @@ const STATUS_LABELS = {
   Hydration: '💧 水分'
 };
 
-const STATUS_COLUMNS = {
-  Pain: ['Status_❤️Pain', 'Pain', '❤️Pain', '症状・痛み'],
-  Activity: ['Status_🚶Activity', 'Activity', '🚶Activity', '活動性'],
-  Muscle: ['Status_💪Muscle', 'Muscle', '💪Muscle', '筋力'],
-  Nutrition: ['Status_🍚Nutrition', 'Nutrition', '🍚Nutrition', '栄養'],
-  Balance: ['Status_⚖Balance', 'Balance', '⚖Balance', 'バランス'],
-  Alertness: ['Status_😴Alertness', 'Alertness', 'Sleep', 'Status_😴Sleep', '😴Alertness', '睡眠'],
-  Hydration: ['Status_💧Hydration', 'Hydration', 'Water', 'Status_💧Water', '💧Hydration', '水分']
+const PATIENT_STATUS_COLUMNS = {
+  Pain: ['Initial_Pain', 'Status_❤️Pain', 'Pain'],
+  Activity: ['Initial_Activity', 'Status_🚶Activity', 'Activity'],
+  Muscle: ['Initial_Muscle', 'Status_💪Muscle', 'Muscle'],
+  Nutrition: ['Initial_Nutrition', 'Status_🍚Nutrition', 'Nutrition'],
+  Balance: ['Initial_Balance', 'Status_⚖Balance', 'Balance'],
+  Alertness: ['Initial_Alertness', 'Initial_Sleep', 'Status_😴Alertness', 'Status_😴Sleep', 'Alertness', 'Sleep'],
+  Hydration: ['Initial_Hydration', 'Status_💧Hydration', 'Hydration']
+};
+
+const EFFECT_COLUMNS = {
+  Pain: ['Pain'],
+  Activity: ['Activity'],
+  Muscle: ['Muscle'],
+  Nutrition: ['Nutrition'],
+  Balance: ['Balance'],
+  Alertness: ['Alertness', 'Sleep'],
+  Hydration: ['Hydration']
 };
 
 const DB = (() => {
@@ -53,57 +65,110 @@ const DB = (() => {
     return fallback;
   }
 
-  function normalizeStatus_(obj) {
+  function normalizePatientStatus_(obj) {
     STATUS_KEYS.forEach(k => {
-      const v = getFirst_(obj, STATUS_COLUMNS[k], 0);
-      obj[k] = Number(v || 0);
+      obj[k] = Number(getFirst_(obj, PATIENT_STATUS_COLUMNS[k], 0) || 0);
     });
     return obj;
   }
 
-  function normalizeCard_(obj) {
-    normalizeStatus_(obj);
-    obj.ID = String(getFirst_(obj, ['CardID', 'カードID', 'ID'], '')).trim();
-    obj.Name = String(getFirst_(obj, ['Name', '名称', 'カード名'], obj.ID)).trim();
-    obj.Type = String(getFirst_(obj, ['Type', '種類', '区分'], '')).trim();
-    obj.Category = String(getFirst_(obj, ['Category', '分類'], '')).trim();
-    obj.Learning = String(getFirst_(obj, ['Learning', '学び', '学習テーマ', '学びポイント'], '')).trim();
-    return obj;
-  }
-
-  function normalizePatient_(obj) {
-    normalizeStatus_(obj);
-    // ここを強化：Patient / 患者ID / 患者ID / PatientID / ID どれでも読める
-    obj.PatientID = String(getFirst_(obj, ['PatientID', 'Patient', '患者ID', '患者Id', 'ID'], '')).trim();
-    obj.Name = String(getFirst_(obj, ['Name', '患者名', '患者', '症例名'], obj.PatientID)).trim();
-    obj.Disease = String(getFirst_(obj, ['Disease', '疾患', '主疾患'], '')).trim();
+  function normalizeEffect_(obj) {
+    STATUS_KEYS.forEach(k => {
+      obj[k] = Number(getFirst_(obj, EFFECT_COLUMNS[k], 0) || 0);
+    });
     return obj;
   }
 
   function getPatients() {
-    return readSheet_('Patients').map(normalizePatient_).filter(p => p.PatientID);
+    // DB v4では Patient_Status がゲーム用。Patientsはプロフィール。
+    try {
+      return readSheet_('Patient_Status').map(row => {
+        normalizePatientStatus_(row);
+        return {
+          PatientID: String(getFirst_(row, ['PatientID', 'Patient', '患者ID', 'ID'], '')).trim(),
+          Name: String(getFirst_(row, ['患者名', 'Name', '氏名'], '')).trim(),
+          Disease: String(getFirst_(row, ['症例', 'Disease', '疾患'], '')).trim(),
+          Want: String(getFirst_(row, ['やりたいこと', 'Want'], '')).trim(),
+          Difficulty: String(getFirst_(row, ['難易度', 'Difficulty'], '')).trim(),
+          Special: String(getFirst_(row, ['特殊能力', 'Special'], '')).trim(),
+          Pain: row.Pain,
+          Activity: row.Activity,
+          Muscle: row.Muscle,
+          Nutrition: row.Nutrition,
+          Balance: row.Balance,
+          Alertness: row.Alertness,
+          Hydration: row.Hydration
+        };
+      }).filter(p => p.PatientID);
+    } catch (e) {
+      // 旧形式の救済
+      return readSheet_('Patients').map(row => {
+        normalizePatientStatus_(row);
+        return {
+          PatientID: String(getFirst_(row, ['PatientID', 'Patient', '患者ID', 'ID'], '')).trim(),
+          Name: String(getFirst_(row, ['患者名', 'Name', '氏名'], '')).trim(),
+          Disease: String(getFirst_(row, ['症例', 'Disease', '疾患'], '')).trim(),
+          Pain: row.Pain,
+          Activity: row.Activity,
+          Muscle: row.Muscle,
+          Nutrition: row.Nutrition,
+          Balance: row.Balance,
+          Alertness: row.Alertness,
+          Hydration: row.Hydration
+        };
+      }).filter(p => p.PatientID);
+    }
   }
 
   function getCards() {
-    for (const name of ['Card_Effects_GAS', 'Cards_All', 'Cards']) {
-      try {
-        return readSheet_(name)
-          .map(normalizeCard_)
-          .filter(c => c.ID && !String(c.ID).startsWith('E'));
-      } catch (e) {}
-    }
-    throw new Error('Card sheet not found');
+    // DB v4正式：Card_Effects_Normalized
+    return readSheet_('Card_Effects_Normalized').map(row => {
+      normalizeEffect_(row);
+      return {
+        ID: String(getFirst_(row, ['CardID', 'ID'], '')).trim(),
+        CardID: String(getFirst_(row, ['CardID', 'ID'], '')).trim(),
+        Name: String(getFirst_(row, ['カード名', 'Name', '名称'], '')).trim(),
+        Type: String(getFirst_(row, ['カード種別', 'Type'], '')).trim(),
+        Subtype: String(getFirst_(row, ['サブタイプ', 'Subtype'], '')).trim(),
+        UseType: String(getFirst_(row, ['使用区分', 'UseType'], '')).trim(),
+        Category: String(getFirst_(row, ['分類', 'Category'], '')).trim(),
+        Learning: String(getFirst_(row, ['学びテーマ', 'Learning', '学び'], '')).trim(),
+        EffectText: String(getFirst_(row, ['効果テキスト', '効果', 'EffectText'], '')).trim(),
+        SideEffect: String(getFirst_(row, ['副作用/特殊', '副作用', 'SideEffect'], '')).trim(),
+        Targets: String(getFirst_(row, ['対象患者', 'Targets'], '')).trim(),
+        Pain: row.Pain,
+        Activity: row.Activity,
+        Muscle: row.Muscle,
+        Nutrition: row.Nutrition,
+        Balance: row.Balance,
+        Alertness: row.Alertness,
+        Hydration: row.Hydration
+      };
+    }).filter(c => c.ID);
   }
 
   function getEvents() {
-    for (const name of ['Event_Effects_GAS', 'Events']) {
-      try {
-        return readSheet_(name)
-          .map(normalizeCard_)
-          .filter(e => e.ID || String(e.EventID || '').startsWith('E'));
-      } catch (e) {}
-    }
-    throw new Error('Event sheet not found');
+    // DB v4正式：Event_Effects_Normalized
+    return readSheet_('Event_Effects_Normalized').map(row => {
+      normalizeEffect_(row);
+      return {
+        ID: String(getFirst_(row, ['EventID', 'ID'], '')).trim(),
+        EventID: String(getFirst_(row, ['EventID', 'ID'], '')).trim(),
+        Name: String(getFirst_(row, ['イベント名', 'カード名', 'Name', '名称'], '')).trim(),
+        Type: String(getFirst_(row, ['区分', 'Type'], '')).trim(),
+        Category: String(getFirst_(row, ['分類', 'Category'], '')).trim(),
+        Learning: String(getFirst_(row, ['学びテーマ', 'Learning', '学び'], '')).trim(),
+        EffectText: String(getFirst_(row, ['効果テキスト', '効果', 'EffectText'], '')).trim(),
+        Targets: String(getFirst_(row, ['対象患者', 'Targets'], '')).trim(),
+        Pain: row.Pain,
+        Activity: row.Activity,
+        Muscle: row.Muscle,
+        Nutrition: row.Nutrition,
+        Balance: row.Balance,
+        Alertness: row.Alertness,
+        Hydration: row.Hydration
+      };
+    }).filter(e => e.ID);
   }
 
   function findPatient(patientId) {

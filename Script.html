@@ -18,7 +18,7 @@ function loadPatients() {
     patients.forEach(p => {
       const opt = document.createElement('option');
       opt.value = p.PatientID;
-      opt.textContent = `${p.PatientID} ${p.Name || ''}`;
+      opt.textContent = `${p.PatientID} ${p.Name || ''}（${p.Disease || ''}）`;
       sel.appendChild(opt);
     });
   }).withFailureHandler(err => alert(err.message)).apiGetPatients();
@@ -49,8 +49,8 @@ function nextTurn() {
 }
 
 function render() {
-  document.getElementById('patientName').textContent = state.patientName || state.patientId;
-  document.getElementById('disease').textContent = state.disease || '';
+  document.getElementById('patientName').textContent = `${state.patientId} ${state.patientName || ''}`;
+  document.getElementById('patientMeta').textContent = `${state.disease || ''}　${state.want ? '目標：' + state.want : ''}　${state.difficulty || ''}`;
   document.getElementById('turn').textContent = `Turn ${state.turn}/${state.maxTurn}`;
 
   const status = document.getElementById('status');
@@ -64,7 +64,10 @@ function render() {
 
   const ev = state.currentEvent;
   document.getElementById('eventCard').innerHTML =
-    `<strong>${ev.ID || ev.EventID || ''} ${ev.Name || ''}</strong><br><span class="effect">${effectText(ev)}</span><br>${ev.Learning ? '学び：' + ev.Learning : ''}`;
+    `<strong>${ev.ID || ''} ${ev.Name || ''}</strong>
+     <div class="meta">${ev.Type || ''} ${ev.Category || ''}</div>
+     <div class="effect">${effectText(ev)}</div>
+     <div>${ev.Learning ? '学び：' + ev.Learning : ''}</div>`;
 
   const hand = document.getElementById('hand');
   hand.innerHTML = '';
@@ -72,11 +75,11 @@ function render() {
     const div = document.createElement('div');
     div.className = 'card';
     div.innerHTML = `
-      <h4>${c.ID || c.CardID} ${c.Name || ''}</h4>
-      <div class="meta">${c.Type || ''} ${c.Category || ''}</div>
+      <h4>${c.ID} ${c.Name || ''}</h4>
+      <div class="meta">${c.Type || ''} ${c.Subtype || ''} ${c.Category || ''}</div>
       <div class="effect">${effectText(c)}</div>
       <div class="meta">${c.Learning ? '学び：' + c.Learning : ''}</div>
-      <button onclick="useCard('${c.ID || c.CardID}')">使用</button>
+      <button onclick="useCard('${c.ID}')">使用</button>
     `;
     hand.appendChild(div);
   });

@@ -1,17 +1,45 @@
-# リハ栄養カードゲーム GAS MVP v0.3
+# リハ栄養カードゲーム GAS MVP v0.4
 
-## 修正点
-- PatientsシートのID列名として、以下に対応。
-  - PatientID
-  - Patient
-  - 患者ID
-  - ID
-- `apiStartGame('P01')` で該当患者が見つからない場合、先頭患者を使用する安全策を追加。
-- `testStartP01()` の Patient not found を回避。
+## DB v4 Phase1監査版対応
 
-## 推奨ヘッダー
-Patientsシートは以下が推奨。
+この版は、以下のシートを読む前提。
 
-PatientID | Name | Disease | Status_❤️Pain | Status_🚶Activity | Status_💪Muscle | Status_🍚Nutrition | Status_⚖Balance | Status_😴Alertness | Status_💧Hydration
+- Patient_Status
+- Card_Effects_Normalized
+- Event_Effects_Normalized
 
-※列名を `Patient` にした場合でも動く。
+## 重要
+
+Patientsシートは患者プロフィール用。
+ゲーム開始時の初期ステータスは Patient_Status から読む。
+
+## 読み込む列
+
+### Patient_Status
+- PatientID
+- 患者名
+- 症例
+- やりたいこと
+- 難易度
+- 特殊能力
+- Initial_Pain
+- Initial_Activity
+- Initial_Muscle
+- Initial_Nutrition
+- Initial_Balance
+- Initial_Sleep または Initial_Alertness
+- Initial_Hydration
+
+### Card_Effects_Normalized / Event_Effects_Normalized
+- CardID または EventID
+- カード名 / イベント名
+- Pain
+- Activity
+- Muscle
+- Nutrition
+- Balance
+- Sleep または Alertness
+- Hydration
+
+## 注意
+内部表示は「Alertness」だが、DB v4の「Sleep」列も自動で読み込む。

@@ -1,7 +1,7 @@
 function doGet() {
   return HtmlService.createTemplateFromFile('Index')
     .evaluate()
-    .setTitle('リハ栄養カードゲーム MVP v0.2')
+    .setTitle('リハ栄養カードゲーム MVP v0.4')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
@@ -23,4 +23,12 @@ function apiNextTurn(state) {
 
 function apiGetPatients() {
   return DB.getPatients();
+}
+
+function apiDebugDb() {
+  return {
+    patients: DB.getPatients().slice(0, 3),
+    cards: DB.getCards().slice(0, 3),
+    events: DB.getEvents().slice(0, 3)
+  };
 }

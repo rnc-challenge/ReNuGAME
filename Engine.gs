@@ -1,7 +1,7 @@
 const GameEngine = (() => {
   function startGame(patientId) {
     const patient = DB.findPatient(patientId);
-    if (!patient) throw new Error('Patient not found. PatientsシートのID列を確認してください。');
+    if (!patient) throw new Error('Patient not found. Patient_Statusシートを確認してください。');
 
     const deck = shuffle_(DB.getCards());
     const hand = deck.splice(0, CONFIG.INITIAL_HAND_SIZE);
@@ -11,6 +11,9 @@ const GameEngine = (() => {
       patientId: patient.PatientID,
       patientName: patient.Name,
       disease: patient.Disease,
+      want: patient.Want,
+      difficulty: patient.Difficulty,
+      special: patient.Special,
       turn: 1,
       maxTurn: CONFIG.MAX_TURN,
       status: pickStatus_(patient),
@@ -27,7 +30,7 @@ const GameEngine = (() => {
   }
 
   function useCard(state, cardId) {
-    const idx = state.hand.findIndex(c => String(c.ID) === String(cardId) || String(c.CardID) === String(cardId));
+    const idx = state.hand.findIndex(c => String(c.ID) === String(cardId));
     if (idx < 0) throw new Error('Card not in hand: ' + cardId);
 
     const card = state.hand.splice(idx, 1)[0];
