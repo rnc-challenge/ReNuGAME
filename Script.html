@@ -1,0 +1,93 @@
+<script>
+let state = null;
+
+const statusLabels = {
+  Pain: '❤️ 症状・痛み',
+  Activity: '🚶 活動性',
+  Muscle: '💪 筋力',
+  Nutrition: '🍚 栄養',
+  Balance: '⚖ バランス',
+  Sleep: '😴 睡眠',
+  Hydration: '💧 水分'
+};
+
+function loadPatients() {
+  google.script.run.withSuccessHandler(patients => {
+    const sel = document.getElementById('patientSelect');
+    sel.innerHTML = '';
+    patients.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.PatientID;
+      opt.textContent = `${p.PatientID} ${p['患者名'] || p.Name || ''}`;
+      sel.appendChild(opt);
+    });
+  }).apiGetPatients();
+}
+
+function startGame() {
+  const patientId = document.getElementById('patientSelect').value || 'P01';
+  google.script.run.withSuccessHandler(s => {
+    state = s;
+    document.getElementById('game').classList.remove('hidden');
+    render();
+  }).apiStartGame(patientId);
+}
+
+function useCard(cardId) {
+  google.script.run.withSuccessHandler(s => {
+    state = s;
+    render();
+  }).apiUseCard(state, cardId);
+}
+
+function nextTurn() {
+  google.script.run.withSuccessHandler(s => {
+    state = s;
+    render();
+    if (state.finished) alert(`${state.result.message}：${state.result.score}点`);
+  }).apiNextTurn(state);
+}
+
+function render() {
+  document.getElementById('patientName').textContent = state.patientName;
+  document.getElementById('turn').textContent = `Turn ${state.turn}/${state.maxTurn}`;
+
+  const status = document.getElementById('status');
+  status.innerHTML = '';
+  Object.keys(statusLabels).forEach(k => {
+    const div = document.createElement('div');
+    div.className = 'status-item';
+    div.innerHTML = `<div>${statusLabels[k]}</div><div>${state.status[k]}</div>`;
+    status.appendChild(div);
+  });
+
+  const ev = state.currentEvent;
+  document.getElementById('eventCard').innerHTML =
+    `<strong>${ev.EventID || ''} ${ev.Name || ev['名称'] || ''}</strong><br>${effectText(ev)}`;
+
+  const hand = document.getElementById('hand');
+  hand.innerHTML = '';
+  state.hand.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.innerHTML = `
+      <h4>${c.CardID} ${c.Name || c['名称'] || ''}</h4>
+      <div>${effectText(c)}</div>
+      <button onclick="useCard('${c.CardID}')">使用</button>
+    `;
+    hand.appendChild(div);
+  });
+
+  document.getElementById('log').textContent = (state.log || []).join('\n');
+}
+
+function effectText(obj) {
+  return Object.keys(statusLabels)
+    .map(k => [k, Number(obj[k] || 0)])
+    .filter(([k, v]) => v !== 0)
+    .map(([k, v]) => `${statusLabels[k]} ${v > 0 ? '+' : ''}${v}`)
+    .join(' / ') || '効果なし';
+}
+
+loadPatients();
+</script>
