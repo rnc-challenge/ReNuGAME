@@ -7,7 +7,7 @@ const statusLabels = {
   Muscle: '💪 筋力',
   Nutrition: '🍚 栄養',
   Balance: '⚖ バランス',
-  Sleep: '😴 睡眠',
+  Alertness: '😴 覚醒・睡眠',
   Hydration: '💧 水分'
 };
 
@@ -18,10 +18,10 @@ function loadPatients() {
     patients.forEach(p => {
       const opt = document.createElement('option');
       opt.value = p.PatientID;
-      opt.textContent = `${p.PatientID} ${p['患者名'] || p.Name || ''}`;
+      opt.textContent = `${p.PatientID} ${p.Name || ''}`;
       sel.appendChild(opt);
     });
-  }).apiGetPatients();
+  }).withFailureHandler(err => alert(err.message)).apiGetPatients();
 }
 
 function startGame() {
@@ -30,14 +30,14 @@ function startGame() {
     state = s;
     document.getElementById('game').classList.remove('hidden');
     render();
-  }).apiStartGame(patientId);
+  }).withFailureHandler(err => alert(err.message)).apiStartGame(patientId);
 }
 
 function useCard(cardId) {
   google.script.run.withSuccessHandler(s => {
     state = s;
     render();
-  }).apiUseCard(state, cardId);
+  }).withFailureHandler(err => alert(err.message)).apiUseCard(state, cardId);
 }
 
 function nextTurn() {
@@ -45,11 +45,12 @@ function nextTurn() {
     state = s;
     render();
     if (state.finished) alert(`${state.result.message}：${state.result.score}点`);
-  }).apiNextTurn(state);
+  }).withFailureHandler(err => alert(err.message)).apiNextTurn(state);
 }
 
 function render() {
-  document.getElementById('patientName').textContent = state.patientName;
+  document.getElementById('patientName').textContent = state.patientName || state.patientId;
+  document.getElementById('disease').textContent = state.disease || '';
   document.getElementById('turn').textContent = `Turn ${state.turn}/${state.maxTurn}`;
 
   const status = document.getElementById('status');
@@ -57,13 +58,13 @@ function render() {
   Object.keys(statusLabels).forEach(k => {
     const div = document.createElement('div');
     div.className = 'status-item';
-    div.innerHTML = `<div>${statusLabels[k]}</div><div>${state.status[k]}</div>`;
+    div.innerHTML = `<div>${statusLabels[k]}</div><div class="status-value">${state.status[k]}</div>`;
     status.appendChild(div);
   });
 
   const ev = state.currentEvent;
   document.getElementById('eventCard').innerHTML =
-    `<strong>${ev.EventID || ''} ${ev.Name || ev['名称'] || ''}</strong><br>${effectText(ev)}`;
+    `<strong>${ev.ID || ev.EventID || ''} ${ev.Name || ''}</strong><br><span class="effect">${effectText(ev)}</span><br>${ev.Learning ? '学び：' + ev.Learning : ''}`;
 
   const hand = document.getElementById('hand');
   hand.innerHTML = '';
@@ -71,9 +72,11 @@ function render() {
     const div = document.createElement('div');
     div.className = 'card';
     div.innerHTML = `
-      <h4>${c.CardID} ${c.Name || c['名称'] || ''}</h4>
-      <div>${effectText(c)}</div>
-      <button onclick="useCard('${c.CardID}')">使用</button>
+      <h4>${c.ID || c.CardID} ${c.Name || ''}</h4>
+      <div class="meta">${c.Type || ''} ${c.Category || ''}</div>
+      <div class="effect">${effectText(c)}</div>
+      <div class="meta">${c.Learning ? '学び：' + c.Learning : ''}</div>
+      <button onclick="useCard('${c.ID || c.CardID}')">使用</button>
     `;
     hand.appendChild(div);
   });

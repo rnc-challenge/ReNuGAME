@@ -1,19 +1,22 @@
-# リハ栄養カードゲーム GAS MVP v0.1
+# リハ栄養カードゲーム GAS MVP v0.2
 
-## 使い方
-1. Excel DBをGoogleスプレッドシートにアップロードする
-2. Apps Scriptプロジェクトを作成
-3. このZIP内のファイルを同名で追加
-4. `DB.gs` の `SPREADSHEET_ID` を自分のスプレッドシートIDに変更
-5. Webアプリとしてデプロイ
+## 変更点
+- 初期ステータス列を以下の形式で読めるようにした。
+  - Status_❤️Pain
+  - Status_🚶Activity
+  - Status_💪Muscle
+  - Status_🍚Nutrition
+  - Status_⚖Balance
+  - Status_😴Alertness
+  - Status_💧Hydration
+- `Sleep` ではなく `Alertness` を内部キーに変更。
+- 患者名、カード名、効果、学びが表示されるようにした。
+- `undefined` と `効果なし` になりにくいように列名候補を複数対応。
 
-## MVP仕様
-- 患者選択
-- 初期ステータス表示
-- イベント抽選
-- 手札4枚
-- カード使用
-- 3ターン終了判定
+## 必須シート
+- Patients
+- Card_Effects_GAS または Cards_All または Cards
+- Event_Effects_GAS または Events
 
 ## 注意
-正式勝利条件は患者別目標に差し替える前提。
+カード効果シートとイベント効果シートにも、同じステータス列名を入れると正しく計算される。

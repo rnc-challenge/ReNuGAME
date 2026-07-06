@@ -3,13 +3,14 @@ const GameEngine = (() => {
     const patient = DB.findPatient(patientId);
     if (!patient) throw new Error('Patient not found: ' + patientId);
 
-    const deck = shuffle_(DB.getCards().filter(c => !String(c.CardID || '').startsWith('E')));
+    const deck = shuffle_(DB.getCards());
     const hand = deck.splice(0, CONFIG.INITIAL_HAND_SIZE);
     const event = drawEvent_();
 
     const state = {
       patientId,
-      patientName: patient['患者名'] || patient.Name || patient.PatientID,
+      patientName: patient.Name,
+      disease: patient.Disease,
       turn: 1,
       maxTurn: CONFIG.MAX_TURN,
       status: pickStatus_(patient),
@@ -20,21 +21,20 @@ const GameEngine = (() => {
       log: []
     };
 
-    applyEvent_(state, event);
-    state.log.push(`Turn 1: イベント「${event.Name || event['名称'] || event.EventID}」発生`);
+    applyEffect_(state.status, event);
+    state.log.push(`Turn 1: イベント「${event.Name || event.ID}」発生`);
     return state;
   }
 
   function useCard(state, cardId) {
-    const idx = state.hand.findIndex(c => String(c.CardID) === String(cardId));
+    const idx = state.hand.findIndex(c => String(c.ID) === String(cardId) || String(c.CardID) === String(cardId));
     if (idx < 0) throw new Error('Card not in hand: ' + cardId);
 
     const card = state.hand.splice(idx, 1)[0];
     applyEffect_(state.status, card);
     state.usedCards.push(card);
-    state.log.push(`Turn ${state.turn}: 「${card.Name || card['名称'] || card.CardID}」を使用`);
+    state.log.push(`Turn ${state.turn}: 「${card.Name || card.ID}」を使用`);
 
-    // 1枚補充
     if (state.deck.length > 0) state.hand.push(state.deck.shift());
     return state;
   }
@@ -48,8 +48,8 @@ const GameEngine = (() => {
     state.turn += 1;
     const event = drawEvent_();
     state.currentEvent = event;
-    applyEvent_(state, event);
-    state.log.push(`Turn ${state.turn}: イベント「${event.Name || event['名称'] || event.EventID}」発生`);
+    applyEffect_(state.status, event);
+    state.log.push(`Turn ${state.turn}: イベント「${event.Name || event.ID}」発生`);
     return state;
   }
 
@@ -58,13 +58,9 @@ const GameEngine = (() => {
     return events[Math.floor(Math.random() * events.length)];
   }
 
-  function applyEvent_(state, event) {
-    applyEffect_(state.status, event);
-  }
-
-  function applyEffect_(status, effectObj) {
+  function applyEffect_(status, obj) {
     STATUS_KEYS.forEach(k => {
-      status[k] = clamp_(Number(status[k] || 0) + Number(effectObj[k] || 0));
+      status[k] = clamp_(Number(status[k] || 0) + Number(obj[k] || 0));
     });
   }
 
@@ -88,7 +84,6 @@ const GameEngine = (() => {
   }
 
   function judge_(state) {
-    // MVPでは平均6以上を仮クリア条件。正式版では患者ごとの目標列に差し替える。
     const sum = STATUS_KEYS.reduce((s, k) => s + Number(state.status[k] || 0), 0);
     const avg = sum / STATUS_KEYS.length;
     return {
