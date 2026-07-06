@@ -13,28 +13,35 @@ const statusLabels = {
 };
 
 function loadPatients() {
-  google.script.run.withSuccessHandler(patients => {
-    const sel = document.getElementById('patientSelect');
-    sel.innerHTML = '';
-    patients.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p.PatientID;
-      opt.textContent = `${p.PatientID} ${p.Name || ''}（${p.Disease || ''}）`;
-      sel.appendChild(opt);
-    });
-  }).withFailureHandler(err => alert(err.message)).apiGetPatients();
+  google.script.run
+    .withSuccessHandler(patients => {
+      const sel = document.getElementById('patientSelect');
+      sel.innerHTML = '';
+
+      patients.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.PatientID;
+        opt.textContent = `${p.PatientID} ${p.Name || ''}（${p.Disease || ''}）`;
+        sel.appendChild(opt);
+      });
+    })
+    .withFailureHandler(err => alert(err.message))
+    .apiGetPatients();
 }
 
 function startGame(patientIdOverride) {
   const patientId = patientIdOverride || document.getElementById('patientSelect').value || 'P001';
   lastPatientId = patientId;
 
-  google.script.run.withSuccessHandler(s => {
-    state = s;
-    document.getElementById('game').classList.remove('hidden');
-    document.getElementById('empty').classList.add('hidden');
-    render();
-  }).withFailureHandler(err => alert(err.message)).apiStartGame(patientId);
+  google.script.run
+    .withSuccessHandler(s => {
+      state = s;
+      document.getElementById('game').classList.remove('hidden');
+      document.getElementById('empty').classList.add('hidden');
+      render();
+    })
+    .withFailureHandler(err => alert(err.message))
+    .apiStartGame(patientId);
 }
 
 function restartSamePatient() {
@@ -43,25 +50,36 @@ function restartSamePatient() {
 }
 
 function revealEvent() {
-  google.script.run.withSuccessHandler(s => {
-    state = s;
-    render();
-  }).withFailureHandler(err => alert(err.message)).apiRevealEvent(state);
+  google.script.run
+    .withSuccessHandler(s => {
+      state = s;
+      render();
+    })
+    .withFailureHandler(err => alert(err.message))
+    .apiRevealEvent(state);
 }
 
 function useCard(cardId) {
-  google.script.run.withSuccessHandler(s => {
-    state = s;
-    render();
-  }).withFailureHandler(err => alert(err.message)).apiUseCard(state, cardId);
+  google.script.run
+    .withSuccessHandler(s => {
+      state = s;
+      render();
+    })
+    .withFailureHandler(err => alert(err.message))
+    .apiUseCard(state, cardId);
 }
 
 function nextTurn() {
-  google.script.run.withSuccessHandler(s => {
-    state = s;
-    render();
-    if (state.finished) alert(`${state.result.message}：${state.result.score}点`);
-  }).withFailureHandler(err => alert(err.message)).apiNextTurn(state);
+  google.script.run
+    .withSuccessHandler(s => {
+      state = s;
+      render();
+      if (state.finished) {
+        alert(`${state.result.message}：${state.result.score}点`);
+      }
+    })
+    .withFailureHandler(err => alert(err.message))
+    .apiNextTurn(state);
 }
 
 function render() {
@@ -102,16 +120,22 @@ function renderPatient() {
         <div class="patient-label">${label}</div>
         <div class="patient-value">${value}</div>
       </div>
-    `).join('');
+    `)
+    .join('');
 }
 
 function renderStatus() {
   const status = document.getElementById('status');
   status.innerHTML = '';
+
   Object.keys(statusLabels).forEach(k => {
     const div = document.createElement('div');
     div.className = 'status-item';
-    const goal = state.goals && state.goals[k] ? `<div class="meta">目標 ${state.goals[k]}</div>` : '';
+
+    const goal = state.goals && state.goals[k]
+      ? `<div class="meta">目標 ${state.goals[k]}</div>`
+      : '';
+
     div.innerHTML = `<div>${statusLabels[k]}</div><div class="status-value">${state.status[k]}</div>${goal}`;
     status.appendChild(div);
   });
@@ -122,14 +146,20 @@ function renderStatusHistory() {
   const rows = state.statusHistory || [];
 
   let html = '<table class="history-table"><thead><tr><th>時点</th>';
-  Object.keys(statusLabels).forEach(k => html += `<th>${statusLabels[k]}</th>`);
+
+  Object.keys(statusLabels).forEach(k => {
+    html += `<th>${statusLabels[k]}</th>`;
+  });
+
   html += '</tr></thead><tbody>';
 
   rows.forEach(row => {
     html += `<tr><td>${row.label}</td>`;
+
     Object.keys(statusLabels).forEach(k => {
       html += `<td>${row.status[k]}</td>`;
     });
+
     html += '</tr>';
   });
 
@@ -174,6 +204,7 @@ function renderHand() {
   state.hand.forEach(c => {
     const div = document.createElement('div');
     div.className = 'card';
+
     div.innerHTML = `
       <h4>${c.ID} ${c.Name || ''}</h4>
       <div class="meta">${c.Type || ''} ${c.Subtype || ''} ${c.Category || ''}</div>
@@ -182,6 +213,7 @@ function renderHand() {
       <div class="meta">${c.Learning ? '学び：' + c.Learning : ''}</div>
       <button ${canUse ? '' : 'disabled'} onclick="useCard('${c.ID}')">使用</button>
     `;
+
     hand.appendChild(div);
   });
 }
@@ -189,6 +221,7 @@ function renderHand() {
 function renderPermanent() {
   const pc = document.getElementById('permanentCards');
   pc.innerHTML = '';
+
   (state.permanentCards || []).forEach(c => {
     const span = document.createElement('span');
     span.className = 'badge';

@@ -6,12 +6,16 @@
 </head>
 <body>
   <div class="app">
-    <h1>リハ栄養カードゲーム v0.8</h1>
+    <h1>リハ栄養カードゲーム v1.0</h1>
 
     <div class="topbar">
       <select id="patientSelect"></select>
       <button onclick="startGame()">🎮 最初から始める</button>
       <button onclick="restartSamePatient()">🔄 同じ患者でもう一度</button>
+    </div>
+
+    <div id="empty" class="panel">
+      患者を選択して「最初から始める」を押す。
     </div>
 
     <div id="game" class="hidden layout">
@@ -56,10 +60,6 @@
           <pre id="log"></pre>
         </div>
       </main>
-    </div>
-
-    <div id="empty" class="panel">
-      患者を選択して「最初から始める」を押す。
     </div>
   </div>
 
