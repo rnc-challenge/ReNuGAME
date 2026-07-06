@@ -6,10 +6,8 @@ const CONFIG = {
   MAX_TURN: 3
 };
 
-// ゲーム内部キー
 const STATUS_KEYS = ['Pain', 'Activity', 'Muscle', 'Nutrition', 'Balance', 'Alertness', 'Hydration'];
 
-// 表示名
 const STATUS_LABELS = {
   Pain: '❤️ 症状・痛み',
   Activity: '🚶 活動性',
@@ -20,7 +18,6 @@ const STATUS_LABELS = {
   Hydration: '💧 水分'
 };
 
-// シート側の列名候補。左から優先して読む。
 const STATUS_COLUMNS = {
   Pain: ['Status_❤️Pain', 'Pain', '❤️Pain', '症状・痛み'],
   Activity: ['Status_🚶Activity', 'Activity', '🚶Activity', '活動性'],
@@ -66,28 +63,28 @@ const DB = (() => {
 
   function normalizeCard_(obj) {
     normalizeStatus_(obj);
-    obj.ID = String(obj.CardID || obj.EventID || obj.ID || '').trim();
-    obj.Name = String(obj.Name || obj['名称'] || obj['カード名'] || obj['患者名'] || obj.ID || '').trim();
-    obj.Type = String(obj.Type || obj['種類'] || obj['区分'] || '').trim();
-    obj.Category = String(obj.Category || obj['分類'] || '').trim();
-    obj.Learning = String(obj.Learning || obj['学び'] || obj['学習テーマ'] || obj['学びポイント'] || '').trim();
+    obj.ID = String(getFirst_(obj, ['CardID', 'カードID', 'ID'], '')).trim();
+    obj.Name = String(getFirst_(obj, ['Name', '名称', 'カード名'], obj.ID)).trim();
+    obj.Type = String(getFirst_(obj, ['Type', '種類', '区分'], '')).trim();
+    obj.Category = String(getFirst_(obj, ['Category', '分類'], '')).trim();
+    obj.Learning = String(getFirst_(obj, ['Learning', '学び', '学習テーマ', '学びポイント'], '')).trim();
     return obj;
   }
 
   function normalizePatient_(obj) {
     normalizeStatus_(obj);
-    obj.PatientID = String(obj.PatientID || obj.ID || '').trim();
-    obj.Name = String(obj.Name || obj['患者名'] || obj['患者'] || obj.PatientID || '').trim();
-    obj.Disease = String(obj.Disease || obj['疾患'] || '').trim();
+    // ここを強化：Patient / 患者ID / 患者ID / PatientID / ID どれでも読める
+    obj.PatientID = String(getFirst_(obj, ['PatientID', 'Patient', '患者ID', '患者Id', 'ID'], '')).trim();
+    obj.Name = String(getFirst_(obj, ['Name', '患者名', '患者', '症例名'], obj.PatientID)).trim();
+    obj.Disease = String(getFirst_(obj, ['Disease', '疾患', '主疾患'], '')).trim();
     return obj;
   }
 
   function getPatients() {
-    return readSheet_('Patients').map(normalizePatient_);
+    return readSheet_('Patients').map(normalizePatient_).filter(p => p.PatientID);
   }
 
   function getCards() {
-    // まずGAS用シートを読む。なければCards_All、Cardsの順に読む。
     for (const name of ['Card_Effects_GAS', 'Cards_All', 'Cards']) {
       try {
         return readSheet_(name)
@@ -110,7 +107,8 @@ const DB = (() => {
   }
 
   function findPatient(patientId) {
-    return getPatients().find(p => String(p.PatientID) === String(patientId));
+    const patients = getPatients();
+    return patients.find(p => String(p.PatientID) === String(patientId)) || patients[0];
   }
 
   return { getPatients, getCards, getEvents, findPatient };

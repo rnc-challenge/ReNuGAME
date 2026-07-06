@@ -1,14 +1,14 @@
 const GameEngine = (() => {
   function startGame(patientId) {
     const patient = DB.findPatient(patientId);
-    if (!patient) throw new Error('Patient not found: ' + patientId);
+    if (!patient) throw new Error('Patient not found. PatientsシートのID列を確認してください。');
 
     const deck = shuffle_(DB.getCards());
     const hand = deck.splice(0, CONFIG.INITIAL_HAND_SIZE);
     const event = drawEvent_();
 
     const state = {
-      patientId,
+      patientId: patient.PatientID,
       patientName: patient.Name,
       disease: patient.Disease,
       turn: 1,
