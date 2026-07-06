@@ -39,9 +39,7 @@ const EFFECT_COLUMNS = {
 };
 
 const DB = (() => {
-  function ss_() {
-    return SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
-  }
+  function ss_() { return SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID); }
 
   function readSheet_(name) {
     const sh = ss_().getSheetByName(name);
@@ -123,7 +121,7 @@ const DB = (() => {
         Category: String(getFirst_(row, ['分類', 'Category'], '')).trim(),
         Learning: String(getFirst_(row, ['学びテーマ', 'Learning', '学び'], '')).trim(),
         EffectText: String(getFirst_(row, ['効果テキスト', '効果', 'EffectText'], '')).trim(),
-        Targets: String(getFirst_(row, ['対象患者', 'Targets', '対象患者'], '')).trim(),
+        Targets: String(getFirst_(row, ['対象患者', 'Targets', 'Patient', 'Patients'], '')).trim(),
         Pain: row.Pain, Activity: row.Activity, Muscle: row.Muscle,
         Nutrition: row.Nutrition, Balance: row.Balance,
         Alertness: row.Alertness, Hydration: row.Hydration
@@ -132,9 +130,9 @@ const DB = (() => {
   }
 
   function getEventsForPatient(patientId) {
-    return getEvents().filter(e => {
-      const targets = String(e.Targets || '').replace(/\s/g, '');
-      if (!targets || targets === 'ALL') return true;
+    return getEvents().filter(event => {
+      const targets = String(event.Targets || '').replace(/\s/g, '');
+      if (targets === '' || targets === 'ALL' || targets === '全患者') return true;
       return targets.split(',').includes(patientId);
     });
   }
@@ -152,23 +150,25 @@ const DB = (() => {
   function getDeckForPatient(patientId) {
     const allCards = getCards();
     const cardById = {};
-    allCards.forEach(c => cardById[c.ID] = c);
+    allCards.forEach(card => cardById[String(card.ID)] = card);
 
     const rows = getPatientDeckRows()
-      .filter(r => r.PatientID === patientId)
-      .filter(r => cardById[r.CardID]);
+      .filter(row => String(row.PatientID).trim() === String(patientId).trim())
+      .filter(row => cardById[String(row.CardID).trim()]);
 
     const initialRows = rows
-      .filter(r => ['Initial', '初期手札'].includes(r.DeckRole))
-      .sort((a, b) => a.SortOrder - b.SortOrder);
+      .filter(row => ['Initial', '初期手札'].includes(String(row.DeckRole).trim()))
+      .sort((a, b) => Number(a.SortOrder || 999) - Number(b.SortOrder || 999));
 
     const addRows = rows
-      .filter(r => ['Add', '追加', '追加用'].includes(r.DeckRole))
-      .sort((a, b) => a.SortOrder - b.SortOrder);
+      .filter(row => ['Add', '追加', '追加用'].includes(String(row.DeckRole).trim()))
+      .sort((a, b) => Number(a.SortOrder || 999) - Number(b.SortOrder || 999));
 
-    const initialIds = new Set(initialRows.map(r => r.CardID));
-    const initialHand = initialRows.map(r => cardById[r.CardID]);
-    const addDeck = addRows.filter(r => !initialIds.has(r.CardID)).map(r => cardById[r.CardID]);
+    const initialIds = new Set(initialRows.map(row => String(row.CardID).trim()));
+    const initialHand = initialRows.map(row => cardById[String(row.CardID).trim()]);
+    const addDeck = addRows
+      .filter(row => !initialIds.has(String(row.CardID).trim()))
+      .map(row => cardById[String(row.CardID).trim()]);
 
     return { initialHand, addDeck, rows };
   }
@@ -178,8 +178,5 @@ const DB = (() => {
     return patients.find(p => String(p.PatientID) === String(patientId)) || patients[0];
   }
 
-  return {
-    getPatients, getCards, getEvents, getEventsForPatient,
-    getPatientDeckRows, getDeckForPatient, findPatient
-  };
+  return { getPatients, getCards, getEvents, getEventsForPatient, getPatientDeckRows, getDeckForPatient, findPatient };
 })();

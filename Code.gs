@@ -1,7 +1,7 @@
 function doGet() {
   return HtmlService.createTemplateFromFile('Index')
     .evaluate()
-    .setTitle('リハ栄養カードゲーム MVP v0.6')
+    .setTitle('リハ栄養カードゲーム MVP v0.7')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
@@ -10,7 +10,7 @@ function include(filename) {
 }
 
 function apiStartGame(patientId) {
-  return GameEngine.startGame(patientId || 'P01');
+  return GameEngine.startGame(patientId || 'P001');
 }
 
 function apiRevealEvent(state) {
@@ -27,13 +27,4 @@ function apiNextTurn(state) {
 
 function apiGetPatients() {
   return DB.getPatients();
-}
-
-function apiDebugDb() {
-  return {
-    patients: DB.getPatients().slice(0, 3),
-    cards: DB.getCards().slice(0, 3),
-    events: DB.getEvents().slice(0, 5),
-    patientDeck: DB.getPatientDeckRows().slice(0, 10)
-  };
 }

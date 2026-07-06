@@ -25,7 +25,7 @@ function loadPatients() {
 }
 
 function startGame() {
-  const patientId = document.getElementById('patientSelect').value || 'P01';
+  const patientId = document.getElementById('patientSelect').value || 'P001';
   google.script.run.withSuccessHandler(s => {
     state = s;
     document.getElementById('game').classList.remove('hidden');
@@ -34,17 +34,13 @@ function startGame() {
 }
 
 function revealEvent() {
-  google.script.run.withSuccessHandler(s => {
-    state = s;
-    render();
-  }).withFailureHandler(err => alert(err.message)).apiRevealEvent(state);
+  google.script.run.withSuccessHandler(s => { state = s; render(); })
+    .withFailureHandler(err => alert(err.message)).apiRevealEvent(state);
 }
 
 function useCard(cardId) {
-  google.script.run.withSuccessHandler(s => {
-    state = s;
-    render();
-  }).withFailureHandler(err => alert(err.message)).apiUseCard(state, cardId);
+  google.script.run.withSuccessHandler(s => { state = s; render(); })
+    .withFailureHandler(err => alert(err.message)).apiUseCard(state, cardId);
 }
 
 function nextTurn() {
@@ -58,9 +54,16 @@ function nextTurn() {
 function render() {
   document.getElementById('patientName').textContent = `${state.patientId} ${state.patientName || ''}`;
   document.getElementById('patientMeta').textContent = `${state.disease || ''}　${state.want ? '目標：' + state.want : ''}　${state.difficulty || ''}`;
-  document.getElementById('turn').textContent =
-    `Turn ${state.turn}/${state.maxTurn}　使用 ${state.cardsUsedThisTurn}/${state.maxCardsPerTurn}`;
+  document.getElementById('turn').textContent = `Turn ${state.turn}/${state.maxTurn}　使用 ${state.cardsUsedThisTurn}/${state.maxCardsPerTurn}`;
+  renderStatus();
+  renderStatusHistory();
+  renderEvent();
+  renderHand();
+  renderPermanent();
+  document.getElementById('log').textContent = (state.log || []).join('\n');
+}
 
+function renderStatus() {
   const status = document.getElementById('status');
   status.innerHTML = '';
   Object.keys(statusLabels).forEach(k => {
@@ -69,54 +72,41 @@ function render() {
     div.innerHTML = `<div>${statusLabels[k]}</div><div class="status-value">${state.status[k]}</div>`;
     status.appendChild(div);
   });
+}
 
-  renderEvent();
-  renderHand();
-  renderPermanent();
-  document.getElementById('log').textContent = (state.log || []).join('\n');
+function renderStatusHistory() {
+  const area = document.getElementById('statusHistory');
+  const rows = state.statusHistory || [];
+  let html = '<table class="history-table"><thead><tr><th>時点</th>';
+  Object.keys(statusLabels).forEach(k => html += `<th>${statusLabels[k]}</th>`);
+  html += '</tr></thead><tbody>';
+  rows.forEach(row => {
+    html += `<tr><td>${row.label}</td>`;
+    Object.keys(statusLabels).forEach(k => html += `<td>${row.status[k]}</td>`);
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  area.innerHTML = html;
 }
 
 function renderEvent() {
   const area = document.getElementById('eventCard');
   const ev = state.currentEvent;
-
   if (!state.eventRevealed) {
-    area.innerHTML = `
-      <div class="event-back">
-        <h2>🎴 イベントカード</h2>
-        <p>クリックしてイベントを表示</p>
-        <button onclick="revealEvent()">イベントカードをめくる</button>
-      </div>
-    `;
+    area.innerHTML = `<div class="event-back"><h2>🎴 イベントカード</h2><p>クリックしてイベントを表示</p><button onclick="revealEvent()">イベントカードをめくる</button></div>`;
     return;
   }
-
-  area.innerHTML = `
-    <div class="event-face">
-      <strong>${ev.ID || ''} ${ev.Name || ''}</strong>
-      <div class="meta">${ev.Type || ''} ${ev.Category || ''}</div>
-      <div class="effect">${effectText(ev)}</div>
-      <div>${ev.Learning ? '学び：' + ev.Learning : ''}</div>
-    </div>
-  `;
+  area.innerHTML = `<div class="event-face"><strong>${ev.ID || ''} ${ev.Name || ''}</strong><div class="meta">${ev.Type || ''} ${ev.Category || ''}</div><div class="effect">${effectText(ev)}</div><div>${ev.Learning ? '学び：' + ev.Learning : ''}</div></div>`;
 }
 
 function renderHand() {
   const hand = document.getElementById('hand');
   hand.innerHTML = '';
-
   const canUse = state.eventRevealed && state.cardsUsedThisTurn < state.maxCardsPerTurn;
-
   state.hand.forEach(c => {
     const div = document.createElement('div');
     div.className = 'card';
-    div.innerHTML = `
-      <h4>${c.ID} ${c.Name || ''}</h4>
-      <div class="meta">${c.Type || ''} ${c.Subtype || ''} ${c.Category || ''}</div>
-      <div class="effect">${effectText(c)}</div>
-      <div class="meta">${c.Learning ? '学び：' + c.Learning : ''}</div>
-      <button ${canUse ? '' : 'disabled'} onclick="useCard('${c.ID}')">使用</button>
-    `;
+    div.innerHTML = `<h4>${c.ID} ${c.Name || ''}</h4><div class="meta">${c.Type || ''} ${c.Subtype || ''} ${c.Category || ''}</div><div class="effect">${effectText(c)}</div><div class="meta">${c.Learning ? '学び：' + c.Learning : ''}</div><button ${canUse ? '' : 'disabled'} onclick="useCard('${c.ID}')">使用</button>`;
     hand.appendChild(div);
   });
 }
