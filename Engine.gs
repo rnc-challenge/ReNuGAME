@@ -1,56 +1,84 @@
 const GameEngine = (() => {
   function startGame(patientId) {
     const patient = DB.findPatient(patientId);
-    if (!patient) throw new Error('Patient not found. Patient_Statusシートを確認してください。');
+    if (!patient) throw new Error('Patientsシートで患者が見つかりません。');
+
+    const statusRow = DB.findStatus(patient.PatientID);
+    if (!statusRow) throw new Error(`Patient_Statusに ${patient.PatientID} がありません。`);
 
     const patientDeck = DB.getDeckForPatient(patient.PatientID);
-    if (patientDeck.initialHand.length === 0) {
-      throw new Error(`Patient_Deckに ${patient.PatientID} の初期手札がありません。DeckRole=Initial または 初期手札 を設定してください。`);
+
+    if (patientDeck.fixedCards.length < CONFIG.FIXED_HAND_COUNT) {
+      throw new Error(`${patient.PatientID} の固定カードが不足しています。Patient_DeckでDeckRole=固定を2枚設定してください。`);
     }
-    if (patientDeck.addDeck.length === 0) {
-      throw new Error(`Patient_Deckに ${patient.PatientID} の追加用デッキがありません。DeckRole=Add または 追加 を設定してください。`);
+    if (patientDeck.candidateCards.length < CONFIG.CANDIDATE_DRAW_COUNT) {
+      throw new Error(`${patient.PatientID} の候補カードが不足しています。Patient_DeckでDeckRole=候補を3枚以上設定してください。`);
     }
 
-    const deck = shuffle_(patientDeck.addDeck);
-    const hand = patientDeck.initialHand.slice(0, 5);
+    const fixedCards = patientDeck.fixedCards.slice(0, CONFIG.FIXED_HAND_COUNT);
+    const shuffledCandidates = shuffle_(patientDeck.candidateCards);
+    const chosenCandidates = shuffledCandidates.slice(0, CONFIG.CANDIDATE_DRAW_COUNT);
+    const remainingCandidates = shuffledCandidates.slice(CONFIG.CANDIDATE_DRAW_COUNT);
+
+    const hand = fixedCards.concat(chosenCandidates);
+    const deck = shuffle_(remainingCandidates.concat(patientDeck.addCards));
+
     const eventDeck = shuffle_(DB.getEventsForPatient(patient.PatientID));
-    if (eventDeck.length === 0) throw new Error(`${patient.PatientID} に使用できるイベントがありません。対象患者列を確認してください。`);
+    if (eventDeck.length === 0) throw new Error(`${patient.PatientID} に使用できるイベントがありません。`);
 
     const currentEvent = eventDeck.shift();
-    const initialStatus = pickStatus_(patient);
+    const initialStatus = pickStatus_(statusRow);
 
-    return {
+    const state = {
       gameId: Utilities.getUuid(),
+
       patientId: patient.PatientID,
-      patientName: patient.Name,
-      disease: patient.Disease,
-      want: patient.Want,
-      difficulty: patient.Difficulty,
-      special: patient.Special,
+      patient: patient,
+
       turn: 1,
       maxTurn: CONFIG.MAX_TURN,
       gameOver: false,
+
       status: Object.assign({}, initialStatus),
-      statusHistory: [{ label: '開始時', turn: 0, status: Object.assign({}, initialStatus) }],
+      goals: pickGoals_(statusRow),
+      statusHistory: [
+        {
+          label: '開始時',
+          turn: 0,
+          status: Object.assign({}, initialStatus)
+        }
+      ],
+
+      fixedCards,
+      chosenCandidates,
       hand,
       deck,
       discard: [],
       usedCards: [],
       permanentCards: [],
+
       eventDeck,
       eventDiscard: [],
       currentEvent,
       eventRevealed: false,
       eventHistory: [],
+
       cardsUsedThisTurn: 0,
       maxCardsPerTurn: CONFIG.MAX_CARDS_PER_TURN,
-      log: ['Turn 1: イベントカードをめくってください']
+
+      log: [
+        `ゲーム開始：${patient.PatientID} ${patient.Name}`,
+        'Turn 1: イベントカードをめくってください'
+      ]
     };
+
+    return state;
   }
 
   function revealEvent(state) {
     if (!state.currentEvent) throw new Error('イベントカードがありません。');
     if (state.eventRevealed) return state;
+
     applyEffect_(state.status, state.currentEvent);
     state.eventRevealed = true;
     state.eventHistory.push(state.currentEvent);
@@ -59,14 +87,19 @@ const GameEngine = (() => {
   }
 
   function useCard(state, cardId) {
-    if (!state.eventRevealed) throw new Error('先にイベントカードをクリックして表示してください。');
-    if (state.cardsUsedThisTurn >= state.maxCardsPerTurn) throw new Error(`このターンで使えるカードは${state.maxCardsPerTurn}枚までです。`);
+    if (!state.eventRevealed) {
+      throw new Error('先にイベントカードをクリックして表示してください。');
+    }
+    if (state.cardsUsedThisTurn >= state.maxCardsPerTurn) {
+      throw new Error(`このターンで使えるカードは${state.maxCardsPerTurn}枚までです。`);
+    }
 
     const idx = state.hand.findIndex(c => String(c.ID) === String(cardId));
-    if (idx < 0) throw new Error('Card not in hand: ' + cardId);
+    if (idx < 0) throw new Error('手札にそのカードがありません: ' + cardId);
 
     const card = state.hand.splice(idx, 1)[0];
     applyEffect_(state.status, card);
+
     state.usedCards.push(card);
     state.cardsUsedThisTurn++;
 
@@ -83,7 +116,10 @@ const GameEngine = (() => {
   }
 
   function nextTurn(state) {
-    if (!state.eventRevealed) throw new Error('イベントカードをめくってから次のターンへ進んでください。');
+    if (!state.eventRevealed) {
+      throw new Error('イベントカードをめくってから次のターンへ進んでください。');
+    }
+
     recordStatusHistory_(state);
     state.eventDiscard.push(state.currentEvent);
 
@@ -112,8 +148,14 @@ const GameEngine = (() => {
 
   function recordStatusHistory_(state) {
     const label = state.turn >= state.maxTurn ? '最終結果' : `${state.turn}ターン終了時`;
-    if (state.statusHistory.some(h => h.turn === state.turn)) return;
-    state.statusHistory.push({ label, turn: state.turn, status: Object.assign({}, state.status) });
+    const alreadyRecorded = state.statusHistory.some(h => h.turn === state.turn);
+    if (alreadyRecorded) return;
+
+    state.statusHistory.push({
+      label,
+      turn: state.turn,
+      status: Object.assign({}, state.status)
+    });
   }
 
   function drawOne_(state) {
@@ -122,11 +164,15 @@ const GameEngine = (() => {
       state.discard = [];
       state.log.push('捨て札をシャッフルして山札に戻した');
     }
-    if (state.deck.length > 0) state.hand.push(state.deck.shift());
+    if (state.deck.length > 0) {
+      state.hand.push(state.deck.shift());
+    }
   }
 
   function applyEffect_(status, obj) {
-    STATUS_KEYS.forEach(k => status[k] = clamp_(Number(status[k] || 0) + Number(obj[k] || 0)));
+    STATUS_KEYS.forEach(k => {
+      status[k] = clamp_(Number(status[k] || 0) + Number(obj[k] || 0));
+    });
   }
 
   function pickStatus_(obj) {
@@ -135,11 +181,21 @@ const GameEngine = (() => {
     return out;
   }
 
-  function isPermanent_(card) {
-    return String(card.UseType || '').includes('永続') || String(card.Subtype || '').includes('永続') || String(card.Type || '').includes('永続');
+  function pickGoals_(obj) {
+    const out = {};
+    STATUS_KEYS.forEach(k => out[k] = Number(obj['Goal_' + k] || 0));
+    return out;
   }
 
-  function clamp_(v) { return Math.max(CONFIG.MIN_STATUS, Math.min(CONFIG.MAX_STATUS, v)); }
+  function isPermanent_(card) {
+    return String(card.UseType || '').includes('永続') ||
+           String(card.Subtype || '').includes('永続') ||
+           String(card.Type || '').includes('永続');
+  }
+
+  function clamp_(v) {
+    return Math.max(CONFIG.MIN_STATUS, Math.min(CONFIG.MAX_STATUS, v));
+  }
 
   function shuffle_(arr) {
     const a = arr.slice();
@@ -151,9 +207,24 @@ const GameEngine = (() => {
   }
 
   function judge_(state) {
-    const sum = STATUS_KEYS.reduce((s, k) => s + Number(state.status[k] || 0), 0);
-    const avg = sum / STATUS_KEYS.length;
-    return { score: Math.round(avg * 10), clear: avg >= 6, message: avg >= 6 ? 'クリア' : '未達成' };
+    const goalKeys = STATUS_KEYS.filter(k => Number(state.goals[k] || 0) > 0);
+    let achieved = 0;
+
+    goalKeys.forEach(k => {
+      if (Number(state.status[k] || 0) >= Number(state.goals[k] || 0)) achieved++;
+    });
+
+    const score = goalKeys.length
+      ? Math.round((achieved / goalKeys.length) * 100)
+      : Math.round((STATUS_KEYS.reduce((s, k) => s + Number(state.status[k] || 0), 0) / STATUS_KEYS.length) * 10);
+
+    return {
+      score,
+      clear: score >= 100,
+      message: score >= 100 ? 'クリア' : '未達成',
+      achieved,
+      totalGoals: goalKeys.length
+    };
   }
 
   return { startGame, revealEvent, useCard, nextTurn };

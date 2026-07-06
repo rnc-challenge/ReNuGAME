@@ -1,5 +1,6 @@
 <script>
 let state = null;
+let lastPatientId = null;
 
 const statusLabels = {
   Pain: '❤️ 症状・痛み',
@@ -24,23 +25,35 @@ function loadPatients() {
   }).withFailureHandler(err => alert(err.message)).apiGetPatients();
 }
 
-function startGame() {
-  const patientId = document.getElementById('patientSelect').value || 'P001';
+function startGame(patientIdOverride) {
+  const patientId = patientIdOverride || document.getElementById('patientSelect').value || 'P001';
+  lastPatientId = patientId;
+
   google.script.run.withSuccessHandler(s => {
     state = s;
     document.getElementById('game').classList.remove('hidden');
+    document.getElementById('empty').classList.add('hidden');
     render();
   }).withFailureHandler(err => alert(err.message)).apiStartGame(patientId);
 }
 
+function restartSamePatient() {
+  const patientId = lastPatientId || document.getElementById('patientSelect').value || 'P001';
+  startGame(patientId);
+}
+
 function revealEvent() {
-  google.script.run.withSuccessHandler(s => { state = s; render(); })
-    .withFailureHandler(err => alert(err.message)).apiRevealEvent(state);
+  google.script.run.withSuccessHandler(s => {
+    state = s;
+    render();
+  }).withFailureHandler(err => alert(err.message)).apiRevealEvent(state);
 }
 
 function useCard(cardId) {
-  google.script.run.withSuccessHandler(s => { state = s; render(); })
-    .withFailureHandler(err => alert(err.message)).apiUseCard(state, cardId);
+  google.script.run.withSuccessHandler(s => {
+    state = s;
+    render();
+  }).withFailureHandler(err => alert(err.message)).apiUseCard(state, cardId);
 }
 
 function nextTurn() {
@@ -52,9 +65,7 @@ function nextTurn() {
 }
 
 function render() {
-  document.getElementById('patientName').textContent = `${state.patientId} ${state.patientName || ''}`;
-  document.getElementById('patientMeta').textContent = `${state.disease || ''}　${state.want ? '目標：' + state.want : ''}　${state.difficulty || ''}`;
-  document.getElementById('turn').textContent = `Turn ${state.turn}/${state.maxTurn}　使用 ${state.cardsUsedThisTurn}/${state.maxCardsPerTurn}`;
+  renderPatient();
   renderStatus();
   renderStatusHistory();
   renderEvent();
@@ -63,13 +74,45 @@ function render() {
   document.getElementById('log').textContent = (state.log || []).join('\n');
 }
 
+function renderPatient() {
+  const p = state.patient || {};
+  document.getElementById('patientName').textContent =
+    `${state.patientId} ${p.Name || ''}`;
+
+  const fields = [
+    ['年齢・性別', `${p.Age || ''}歳　${p.Sex || ''}`],
+    ['主疾患', p.Disease],
+    ['副疾患', p.SubDisease],
+    ['生活背景', p.Life],
+    ['介護度', p.CareLevel],
+    ['歩行能力', p.Walking],
+    ['認知機能', p.Cognition],
+    ['栄養状態', `${p.BMI ? 'BMI ' + p.BMI + '　' : ''}${p.NutritionStatus || ''}`],
+    ['服薬数', p.MedicationCount ? `${p.MedicationCount}剤` : ''],
+    ['患者の目標', p.Goal],
+    ['大切にしていること', p.Values],
+    ['症例概要', p.Summary],
+    ['難易度', p.Difficulty]
+  ];
+
+  document.getElementById('patientProfile').innerHTML = fields
+    .filter(([label, value]) => value)
+    .map(([label, value]) => `
+      <div class="patient-field">
+        <div class="patient-label">${label}</div>
+        <div class="patient-value">${value}</div>
+      </div>
+    `).join('');
+}
+
 function renderStatus() {
   const status = document.getElementById('status');
   status.innerHTML = '';
   Object.keys(statusLabels).forEach(k => {
     const div = document.createElement('div');
     div.className = 'status-item';
-    div.innerHTML = `<div>${statusLabels[k]}</div><div class="status-value">${state.status[k]}</div>`;
+    const goal = state.goals && state.goals[k] ? `<div class="meta">目標 ${state.goals[k]}</div>` : '';
+    div.innerHTML = `<div>${statusLabels[k]}</div><div class="status-value">${state.status[k]}</div>${goal}`;
     status.appendChild(div);
   });
 }
@@ -77,14 +120,19 @@ function renderStatus() {
 function renderStatusHistory() {
   const area = document.getElementById('statusHistory');
   const rows = state.statusHistory || [];
+
   let html = '<table class="history-table"><thead><tr><th>時点</th>';
   Object.keys(statusLabels).forEach(k => html += `<th>${statusLabels[k]}</th>`);
   html += '</tr></thead><tbody>';
+
   rows.forEach(row => {
     html += `<tr><td>${row.label}</td>`;
-    Object.keys(statusLabels).forEach(k => html += `<td>${row.status[k]}</td>`);
+    Object.keys(statusLabels).forEach(k => {
+      html += `<td>${row.status[k]}</td>`;
+    });
     html += '</tr>';
   });
+
   html += '</tbody></table>';
   area.innerHTML = html;
 }
@@ -92,21 +140,48 @@ function renderStatusHistory() {
 function renderEvent() {
   const area = document.getElementById('eventCard');
   const ev = state.currentEvent;
+
   if (!state.eventRevealed) {
-    area.innerHTML = `<div class="event-back"><h2>🎴 イベントカード</h2><p>クリックしてイベントを表示</p><button onclick="revealEvent()">イベントカードをめくる</button></div>`;
+    area.innerHTML = `
+      <div class="event-back">
+        <h2>🎴 イベントカード</h2>
+        <p>クリックしてイベントを表示</p>
+        <button onclick="revealEvent()">イベントカードをめくる</button>
+      </div>
+    `;
     return;
   }
-  area.innerHTML = `<div class="event-face"><strong>${ev.ID || ''} ${ev.Name || ''}</strong><div class="meta">${ev.Type || ''} ${ev.Category || ''}</div><div class="effect">${effectText(ev)}</div><div>${ev.Learning ? '学び：' + ev.Learning : ''}</div></div>`;
+
+  area.innerHTML = `
+    <div class="event-face">
+      <strong>${ev.ID || ''} ${ev.Name || ''}</strong>
+      <div class="meta">${ev.Type || ''} ${ev.Category || ''}</div>
+      <div class="effect">${effectText(ev)}</div>
+      <div>${ev.Learning ? '学び：' + ev.Learning : ''}</div>
+    </div>
+  `;
 }
 
 function renderHand() {
+  document.getElementById('turn').textContent =
+    `Turn ${state.turn}/${state.maxTurn}　使用 ${state.cardsUsedThisTurn}/${state.maxCardsPerTurn}`;
+
   const hand = document.getElementById('hand');
   hand.innerHTML = '';
+
   const canUse = state.eventRevealed && state.cardsUsedThisTurn < state.maxCardsPerTurn;
+
   state.hand.forEach(c => {
     const div = document.createElement('div');
     div.className = 'card';
-    div.innerHTML = `<h4>${c.ID} ${c.Name || ''}</h4><div class="meta">${c.Type || ''} ${c.Subtype || ''} ${c.Category || ''}</div><div class="effect">${effectText(c)}</div><div class="meta">${c.Learning ? '学び：' + c.Learning : ''}</div><button ${canUse ? '' : 'disabled'} onclick="useCard('${c.ID}')">使用</button>`;
+    div.innerHTML = `
+      <h4>${c.ID} ${c.Name || ''}</h4>
+      <div class="meta">${c.Type || ''} ${c.Subtype || ''} ${c.Category || ''}</div>
+      <div class="effect">${effectText(c)}</div>
+      <div class="meta">${c.SideEffect && c.SideEffect !== 'なし' ? '副作用：' + c.SideEffect : ''}</div>
+      <div class="meta">${c.Learning ? '学び：' + c.Learning : ''}</div>
+      <button ${canUse ? '' : 'disabled'} onclick="useCard('${c.ID}')">使用</button>
+    `;
     hand.appendChild(div);
   });
 }

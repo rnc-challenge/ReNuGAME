@@ -3,7 +3,9 @@ const CONFIG = {
   MAX_STATUS: 10,
   MIN_STATUS: 0,
   MAX_TURN: 3,
-  MAX_CARDS_PER_TURN: 2
+  MAX_CARDS_PER_TURN: 2,
+  FIXED_HAND_COUNT: 2,
+  CANDIDATE_DRAW_COUNT: 3
 };
 
 const STATUS_KEYS = ['Pain', 'Activity', 'Muscle', 'Nutrition', 'Balance', 'Alertness', 'Hydration'];
@@ -18,28 +20,10 @@ const STATUS_LABELS = {
   Hydration: '💧 水分'
 };
 
-const PATIENT_STATUS_COLUMNS = {
-  Pain: ['Initial_Pain', 'Status_❤️Pain', 'Pain'],
-  Activity: ['Initial_Activity', 'Status_🚶Activity', 'Activity'],
-  Muscle: ['Initial_Muscle', 'Status_💪Muscle', 'Muscle'],
-  Nutrition: ['Initial_Nutrition', 'Status_🍚Nutrition', 'Nutrition'],
-  Balance: ['Initial_Balance', 'Status_⚖Balance', 'Balance'],
-  Alertness: ['Initial_Alertness', 'Initial_Sleep', 'Status_😴Alertness', 'Status_😴Sleep', 'Alertness', 'Sleep'],
-  Hydration: ['Initial_Hydration', 'Status_💧Hydration', 'Hydration']
-};
-
-const EFFECT_COLUMNS = {
-  Pain: ['Pain'],
-  Activity: ['Activity'],
-  Muscle: ['Muscle'],
-  Nutrition: ['Nutrition'],
-  Balance: ['Balance'],
-  Alertness: ['Alertness', 'Sleep'],
-  Hydration: ['Hydration']
-};
-
 const DB = (() => {
-  function ss_() { return SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID); }
+  function ss_() {
+    return SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  }
 
   function readSheet_(name) {
     const sh = ss_().getSheetByName(name);
@@ -61,31 +45,49 @@ const DB = (() => {
     return fallback;
   }
 
-  function normalizePatientStatus_(obj) {
-    STATUS_KEYS.forEach(k => obj[k] = Number(getFirst_(obj, PATIENT_STATUS_COLUMNS[k], 0) || 0));
-    return obj;
-  }
-
   function normalizeEffect_(obj) {
-    STATUS_KEYS.forEach(k => obj[k] = Number(getFirst_(obj, EFFECT_COLUMNS[k], 0) || 0));
+    STATUS_KEYS.forEach(k => {
+      const val = getFirst_(obj, [k, k === 'Alertness' ? 'Sleep' : k], 0);
+      obj[k] = Number(val || 0);
+    });
     return obj;
   }
 
   function getPatients() {
+    return readSheet_('Patients').map(row => ({
+      PatientID: String(getFirst_(row, ['PatientID', 'Patient', '患者ID', 'ID'], '')).trim(),
+      Name: String(getFirst_(row, ['患者名', 'Name', '氏名'], '')).trim(),
+      Age: String(getFirst_(row, ['年齢', 'Age'], '')).trim(),
+      Sex: String(getFirst_(row, ['性別', 'Sex'], '')).trim(),
+      Disease: String(getFirst_(row, ['主疾患', 'Disease', '疾患'], '')).trim(),
+      SubDisease: String(getFirst_(row, ['副疾患', 'SubDisease'], '')).trim(),
+      Height: String(getFirst_(row, ['身長(cm)', '身長', 'Height'], '')).trim(),
+      Weight: String(getFirst_(row, ['体重(kg)', '体重', 'Weight'], '')).trim(),
+      BMI: String(getFirst_(row, ['BMI'], '')).trim(),
+      Life: String(getFirst_(row, ['生活背景', 'Life'], '')).trim(),
+      CareLevel: String(getFirst_(row, ['介護度', 'CareLevel'], '')).trim(),
+      Walking: String(getFirst_(row, ['歩行能力', 'Walking'], '')).trim(),
+      Cognition: String(getFirst_(row, ['認知機能', 'Cognition'], '')).trim(),
+      NutritionStatus: String(getFirst_(row, ['栄養状態', 'NutritionStatus'], '')).trim(),
+      MedicationCount: String(getFirst_(row, ['服薬数', 'MedicationCount'], '')).trim(),
+      Goal: String(getFirst_(row, ['患者の目標', '目標', 'Goal'], '')).trim(),
+      Values: String(getFirst_(row, ['本人が大切にしていること', 'Values'], '')).trim(),
+      Summary: String(getFirst_(row, ['症例概要', '患者背景', 'Summary'], '')).trim(),
+      Difficulty: String(getFirst_(row, ['難易度', 'Difficulty'], '')).trim()
+    })).filter(p => p.PatientID);
+  }
+
+  function getPatientStatusRows() {
     return readSheet_('Patient_Status').map(row => {
-      normalizePatientStatus_(row);
-      return {
-        PatientID: String(getFirst_(row, ['PatientID', 'Patient', '患者ID', 'ID'], '')).trim(),
-        Name: String(getFirst_(row, ['患者名', 'Name', '氏名'], '')).trim(),
-        Disease: String(getFirst_(row, ['症例', 'Disease', '疾患'], '')).trim(),
-        Want: String(getFirst_(row, ['やりたいこと', 'Want'], '')).trim(),
-        Difficulty: String(getFirst_(row, ['難易度', 'Difficulty'], '')).trim(),
-        Special: String(getFirst_(row, ['特殊能力', 'Special'], '')).trim(),
-        Pain: row.Pain, Activity: row.Activity, Muscle: row.Muscle,
-        Nutrition: row.Nutrition, Balance: row.Balance,
-        Alertness: row.Alertness, Hydration: row.Hydration
+      const obj = {
+        PatientID: String(getFirst_(row, ['PatientID', 'Patient', '患者ID', 'ID'], '')).trim()
       };
-    }).filter(p => p.PatientID);
+      STATUS_KEYS.forEach(k => {
+        obj[k] = Number(getFirst_(row, [k, k === 'Alertness' ? 'Sleep' : k], 0) || 0);
+        obj['Goal_' + k] = Number(getFirst_(row, ['Goal_' + k, k === 'Alertness' ? 'Goal_Sleep' : 'Goal_' + k], 0) || 0);
+      });
+      return obj;
+    }).filter(r => r.PatientID);
   }
 
   function getCards() {
@@ -94,18 +96,22 @@ const DB = (() => {
       return {
         ID: String(getFirst_(row, ['CardID', 'ID'], '')).trim(),
         CardID: String(getFirst_(row, ['CardID', 'ID'], '')).trim(),
-        Name: String(getFirst_(row, ['カード名', 'Name', '名称'], '')).trim(),
-        Type: String(getFirst_(row, ['カード種別', 'Type'], '')).trim(),
+        Type: String(getFirst_(row, ['カード種別', '種類', 'Type'], '')).trim(),
         Subtype: String(getFirst_(row, ['サブタイプ', 'Subtype'], '')).trim(),
         UseType: String(getFirst_(row, ['使用区分', 'UseType'], '')).trim(),
-        Category: String(getFirst_(row, ['分類', 'Category'], '')).trim(),
-        Learning: String(getFirst_(row, ['学びテーマ', 'Learning', '学び'], '')).trim(),
+        Name: String(getFirst_(row, ['カード名', 'Name', '名称'], '')).trim(),
         EffectText: String(getFirst_(row, ['効果テキスト', '効果', 'EffectText'], '')).trim(),
         SideEffect: String(getFirst_(row, ['副作用/特殊', '副作用', 'SideEffect'], '')).trim(),
+        Category: String(getFirst_(row, ['分類', 'Category'], '')).trim(),
+        Learning: String(getFirst_(row, ['学びテーマ', 'Learning', '学び'], '')).trim(),
         Targets: String(getFirst_(row, ['対象患者', 'Targets'], '')).trim(),
-        Pain: row.Pain, Activity: row.Activity, Muscle: row.Muscle,
-        Nutrition: row.Nutrition, Balance: row.Balance,
-        Alertness: row.Alertness, Hydration: row.Hydration
+        Pain: row.Pain,
+        Activity: row.Activity,
+        Muscle: row.Muscle,
+        Nutrition: row.Nutrition,
+        Balance: row.Balance,
+        Alertness: row.Alertness,
+        Hydration: row.Hydration
       };
     }).filter(c => c.ID);
   }
@@ -116,15 +122,19 @@ const DB = (() => {
       return {
         ID: String(getFirst_(row, ['EventID', 'ID'], '')).trim(),
         EventID: String(getFirst_(row, ['EventID', 'ID'], '')).trim(),
-        Name: String(getFirst_(row, ['イベント名', 'カード名', 'Name', '名称'], '')).trim(),
         Type: String(getFirst_(row, ['区分', 'Type'], '')).trim(),
+        Name: String(getFirst_(row, ['イベント名', 'カード名', 'Name', '名称'], '')).trim(),
+        EffectText: String(getFirst_(row, ['効果テキスト', '効果', 'EffectText'], '')).trim(),
         Category: String(getFirst_(row, ['分類', 'Category'], '')).trim(),
         Learning: String(getFirst_(row, ['学びテーマ', 'Learning', '学び'], '')).trim(),
-        EffectText: String(getFirst_(row, ['効果テキスト', '効果', 'EffectText'], '')).trim(),
-        Targets: String(getFirst_(row, ['対象患者', 'Targets', 'Patient', 'Patients'], '')).trim(),
-        Pain: row.Pain, Activity: row.Activity, Muscle: row.Muscle,
-        Nutrition: row.Nutrition, Balance: row.Balance,
-        Alertness: row.Alertness, Hydration: row.Hydration
+        Targets: String(getFirst_(row, ['対象患者', 'Targets'], '')).trim(),
+        Pain: row.Pain,
+        Activity: row.Activity,
+        Muscle: row.Muscle,
+        Nutrition: row.Nutrition,
+        Balance: row.Balance,
+        Alertness: row.Alertness,
+        Hydration: row.Hydration
       };
     }).filter(e => e.ID);
   }
@@ -148,29 +158,30 @@ const DB = (() => {
   }
 
   function getDeckForPatient(patientId) {
-    const allCards = getCards();
     const cardById = {};
-    allCards.forEach(card => cardById[String(card.ID)] = card);
+    getCards().forEach(card => cardById[String(card.ID)] = card);
 
     const rows = getPatientDeckRows()
       .filter(row => String(row.PatientID).trim() === String(patientId).trim())
       .filter(row => cardById[String(row.CardID).trim()]);
 
-    const initialRows = rows
-      .filter(row => ['Initial', '初期手札'].includes(String(row.DeckRole).trim()))
-      .sort((a, b) => Number(a.SortOrder || 999) - Number(b.SortOrder || 999));
+    const fixedRows = rows
+      .filter(row => ['固定', 'Fixed'].includes(String(row.DeckRole).trim()))
+      .sort((a, b) => a.SortOrder - b.SortOrder);
+
+    const candidateRows = rows
+      .filter(row => ['候補', 'Candidate'].includes(String(row.DeckRole).trim()))
+      .sort((a, b) => a.SortOrder - b.SortOrder);
 
     const addRows = rows
-      .filter(row => ['Add', '追加', '追加用'].includes(String(row.DeckRole).trim()))
-      .sort((a, b) => Number(a.SortOrder || 999) - Number(b.SortOrder || 999));
+      .filter(row => ['追加', '追加用', 'Add'].includes(String(row.DeckRole).trim()))
+      .sort((a, b) => a.SortOrder - b.SortOrder);
 
-    const initialIds = new Set(initialRows.map(row => String(row.CardID).trim()));
-    const initialHand = initialRows.map(row => cardById[String(row.CardID).trim()]);
-    const addDeck = addRows
-      .filter(row => !initialIds.has(String(row.CardID).trim()))
-      .map(row => cardById[String(row.CardID).trim()]);
+    const fixedCards = fixedRows.map(row => cardById[String(row.CardID).trim()]);
+    const candidateCards = candidateRows.map(row => cardById[String(row.CardID).trim()]);
+    const addCards = addRows.map(row => cardById[String(row.CardID).trim()]);
 
-    return { initialHand, addDeck, rows };
+    return { fixedCards, candidateCards, addCards, rows };
   }
 
   function findPatient(patientId) {
@@ -178,5 +189,20 @@ const DB = (() => {
     return patients.find(p => String(p.PatientID) === String(patientId)) || patients[0];
   }
 
-  return { getPatients, getCards, getEvents, getEventsForPatient, getPatientDeckRows, getDeckForPatient, findPatient };
+  function findStatus(patientId) {
+    const rows = getPatientStatusRows();
+    return rows.find(r => String(r.PatientID) === String(patientId));
+  }
+
+  return {
+    getPatients,
+    getPatientStatusRows,
+    getCards,
+    getEvents,
+    getEventsForPatient,
+    getPatientDeckRows,
+    getDeckForPatient,
+    findPatient,
+    findStatus
+  };
 })();
